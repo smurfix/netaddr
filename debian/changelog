@@ -1,0 +1,5 @@
+netaddr (0.7.19-1) smurf; urgency=low
+
+  * source package automatically created by stdeb 0.8.5
+
+ -- Matthias Urlichs <matthias@urlichs.de>  Fri, 14 Feb 2020 20:18:36 +0100

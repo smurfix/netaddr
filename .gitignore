@@ -11,4 +11,4 @@ docs/build/
 .cache/
 .vagrant/
 tmp/
-*.iml
+*.iml/.pybuild/
