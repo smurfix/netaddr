@@ -1,3 +1,9 @@
+netaddr (0.7.20-2) unstable; urgency=medium
+
+  * Rebuild because of stupid dependency
+
+ -- Matthias Urlichs <matthias@urlichs.de>  Thu, 25 Jun 2020 09:26:13 +0200
+
 netaddr (0.7.20-1) smurf; urgency=low
 
   * source package automatically created by stdeb 0.8.5
