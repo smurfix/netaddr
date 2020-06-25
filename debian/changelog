@@ -2,7 +2,7 @@ netaddr (0.7.20-2) unstable; urgency=medium
 
   * Rebuild because of stupid dependency
 
- -- Matthias Urlichs <matthias@urlichs.de>  Thu, 25 Jun 2020 09:26:13 +0200
+ -- Matthias Urlichs <matthias@urlichs.de>  Thu, 25 Jun 2020 09:26:14 +0200
 
 netaddr (0.7.20-1) smurf; urgency=low
 
