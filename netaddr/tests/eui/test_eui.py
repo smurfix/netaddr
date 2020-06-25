@@ -93,6 +93,13 @@ def test_eui_dialect_property_assignment():
     assert str(mac) == '001b77:4954fd'
 
 
+def test_eui_format():
+    mac = EUI('00-1B-77-49-54-FD')
+    assert mac.format() == '00-1B-77-49-54-FD'
+    assert mac.format(mac_pgsql) == '001b77:4954fd'
+    assert mac.format(mac_unix_expanded) == '00:1b:77:49:54:fd'
+
+
 def test_eui_custom_dialect():
     class mac_custom(mac_unix):
         word_fmt = '%.2X'
@@ -170,8 +177,8 @@ def test_oui_constructor():
     assert oui.registration(1).oui == '08-00-30'
 
     assert oui.registration(2).address == [
-        'CH-1211 GENEVE 23',
-        'SUISSE/SWITZ',
+        'CH-1211',
+        'GENEVE  SUISSE/SWITZ  023',
         'CH'
     ]
     assert oui.registration(2).org == 'CERN'
@@ -225,6 +232,21 @@ def test_iab():
     assert eui.ei == '05-C0-00'
     assert int(eui.oui) == 0x0050c2
     assert int(eui.iab) == 0x0050c205c
+
+    assert IAB(eui.value) == eui.iab
+
+
+def test_new_iab():
+    eui = EUI('40-D8-55-13-10-00')
+
+    assert eui.is_iab()
+    assert str(eui.oui) == '40-D8-55'
+    assert str(eui.iab) == '40-D8-55-13-10-00'
+    assert eui.ei == '13-10-00'
+    assert int(eui.oui) == 0x40d855
+    assert int(eui.iab) == 0x40d855131
+
+    assert IAB(eui.value) == eui.iab
 
 
 def test_eui48_vs_eui64():

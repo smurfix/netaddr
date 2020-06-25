@@ -41,15 +41,15 @@ doc:
 
 download:
 	@echo 'downloading latest IEEE data'
-	cd netaddr/eui/ && wget -N http://standards-oui.ieee.org/oui/oui.txt
-	cd netaddr/eui/ && wget -N http://standards-oui.ieee.org/iab/iab.txt
+	cd netaddr/eui/ && wget http://standards-oui.ieee.org/oui/oui.txt
+	cd netaddr/eui/ && wget http://standards-oui.ieee.org/iab/iab.txt
 	@echo 'rebuilding IEEE data file indices'
 	python netaddr/eui/ieee.py
 	@echo 'downloading latest IANA data'
-	cd netaddr/ip/ && wget -N http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.xml
-	cd netaddr/ip/ && wget -N http://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xml
-	cd netaddr/ip/ && wget -N http://www.iana.org/assignments/multicast-addresses/multicast-addresses.xml
-	cd netaddr/ip/ && wget -N http://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xml
+	cd netaddr/ip/ && wget https://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.xml
+	cd netaddr/ip/ && wget https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xml
+	cd netaddr/ip/ && wget https://www.iana.org/assignments/multicast-addresses/multicast-addresses.xml
+	cd netaddr/ip/ && wget https://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xml
 
 register:
 	@echo 'releasing netaddr'
@@ -58,6 +58,13 @@ register:
 push_tags:
 	@echo 'syncing tags'
 	git push --tags
+
+ci: test_with_junitxml lint
+
+lint: setup_check
+
+setup_check:
+	python setup.py check
 
 test: clean
 	@echo 'running test suite'
@@ -68,4 +75,4 @@ test: clean
 
 test_with_junitxml: clean
 	@echo 'running test suite with JUnit XML output'
-	py.test -vv --junitxml=$$CI_REPORTS/junit.xml $(PWD)/netaddr/tests
+	py.test -vv --junitxml=junit.xml

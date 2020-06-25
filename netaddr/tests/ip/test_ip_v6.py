@@ -1,4 +1,5 @@
 import pickle
+import sys
 import pytest
 from netaddr import IPAddress, IPNetwork
 
@@ -11,6 +12,8 @@ def test_ipaddress_v6():
     assert ip.format() == 'fe80::dead:beef'
     assert int(ip) == 338288524927261089654018896845083623151
     assert hex(ip) == '0xfe8000000000000000000000deadbeef'
+    if sys.version_info[0] > 2:
+        assert bytes(ip) == b'\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xde\xad\xbe\xef'
     assert ip.bin == '0b11111110100000000000000000000000000000000000000000000000000000000000000000000000000000000000000011011110101011011011111011101111'
     assert ip.bits() == '1111111010000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000:0000000000000000:1101111010101101:1011111011101111'
     assert ip.words == (65152, 0, 0, 0, 0, 0, 57005, 48879)
@@ -66,7 +69,13 @@ def test_ipnetwork_slice_v6():
 
 
 def test_ip_network_membership_v6():
-    assert IPAddress('ffff::1') in IPNetwork('ffff::/127')
+    for what, network, result in [
+        (IPAddress('ffff::1'), IPNetwork('ffff::/127'), True),
+        (IPNetwork('ffff::/127'), IPNetwork('ffff::/127'), True),
+        (IPNetwork('fe80::/10'), IPNetwork('ffff::/127'), False),
+    ]:
+        assert (what in network) is result
+        assert (str(what) in network) is result
 
 
 def test_ip_network_equality_v6():
@@ -138,3 +147,22 @@ def test_ipv6_unicast_address_allocation_info():
     assert ip.info.IPv6_unicast[0].description == 'LACNIC'
     assert ip.info.IPv6_unicast[0].whois == 'whois.lacnic.net'
     assert ip.info.IPv6_unicast[0].status == 'ALLOCATED'
+
+def test_rfc6164_subnets():
+    # Tests for /127 subnet
+    assert list(IPNetwork('1234::/127')) == [
+        IPAddress('1234::'),
+        IPAddress('1234::1'),
+    ]
+    assert list(IPNetwork('1234::/127').iter_hosts()) == [
+        IPAddress('1234::'),
+        IPAddress('1234::1'),
+    ]
+    assert IPNetwork('1234::/127').network == IPAddress('1234::')
+    assert IPNetwork('1234::').broadcast is None
+
+    # Tests for /128 subnet
+    assert IPNetwork("1234::/128").network == IPAddress('1234::')
+    assert IPNetwork("1234::/128").broadcast is None
+    assert list(IPNetwork("1234::/128")) == [IPAddress('1234::')]
+    assert list(IPNetwork("1234::/128").iter_hosts()) == [IPAddress('1234::')]

@@ -1,10 +1,11 @@
 import pickle
 import types
 import random
+import sys
 
 import pytest
 
-from netaddr import IPAddress, IPNetwork, INET_PTON, AddrFormatError, ZEROFILL, Z, P, NOHOST
+from netaddr import IPAddress, IPNetwork, INET_PTON, spanning_cidr, AddrFormatError, ZEROFILL, Z, P, NOHOST
 
 
 def test_ipaddress_v4():
@@ -15,6 +16,8 @@ def test_ipaddress_v4():
     assert ip.format() == '192.0.2.1'
     assert int(ip) == 3221225985
     assert hex(ip) == '0xc0000201'
+    if sys.version_info[0] > 2:
+        assert bytes(ip) == b'\xc0\x00\x02\x01'
     assert ip.bin == '0b11000000000000000000001000000001'
     assert ip.bits() == '11000000.00000000.00000010.00000001'
     assert ip.words == (192, 0, 2, 1)
@@ -257,8 +260,6 @@ def test_iterhosts_v4():
         IPAddress('192.168.0.1'),
     ]
 
-    assert list(IPNetwork("1234::/128")) == [IPAddress('1234::')]
-    assert list(IPNetwork("1234::/128").iter_hosts()) == []
     assert list(IPNetwork("192.168.0.0/31").iter_hosts()) == [IPAddress('192.168.0.0'),IPAddress('192.168.0.1')]
     assert list(IPNetwork("192.168.0.0/32").iter_hosts()) == [IPAddress('192.168.0.0')]
 
@@ -299,11 +300,15 @@ def test_ipnetwork_slicing_v4():
 
 
 def test_ip_network_membership_v4():
-    assert IPAddress('192.0.2.1') in IPNetwork('192.0.2.0/24')
-    assert IPAddress('192.0.2.255') in IPNetwork('192.0.2.0/24')
-    assert IPNetwork('192.0.2.0/24') in IPNetwork('192.0.2.0/23')
-    assert IPNetwork('192.0.2.0/24') in IPNetwork('192.0.2.0/24')
-    assert IPNetwork('192.0.2.0/23') not in IPNetwork('192.0.2.0/24')
+    for what, network, result in [
+        (IPAddress('192.0.2.1'), IPNetwork('192.0.2.0/24'), True),
+        (IPAddress('192.0.2.255'), IPNetwork('192.0.2.0/24'), True),
+        (IPNetwork('192.0.2.0/24'), IPNetwork('192.0.2.0/23'), True),
+        (IPNetwork('192.0.2.0/24'), IPNetwork('192.0.2.0/24'), True),
+        (IPNetwork('192.0.2.0/23'), IPNetwork('192.0.2.0/24'), False),
+    ]:
+        assert (what in network) is result
+        assert (str(what) in network) is result
 
 
 def test_ip_network_equality_v4():
@@ -506,6 +511,37 @@ def test_rfc3021_subnets():
     assert IPNetwork('192.0.2.0/32').broadcast is None
     assert list(IPNetwork('192.0.2.0/32').iter_hosts()) == [IPAddress('192.0.2.0')]
 
-    # IPv6 must not be affected
-    assert IPNetwork('abcd::/127').broadcast is not None
-    assert IPNetwork('abcd::/128').broadcast is not None
+
+def test_ipnetwork_change_prefixlen():
+    ip = IPNetwork('192.168.0.0/16')
+    assert ip.prefixlen == 16
+    ip.prefixlen = 8
+    assert ip.prefixlen == 8
+
+    ip = IPNetwork('dead:beef::/16')
+    assert ip.prefixlen == 16
+    ip.prefixlen = 64
+    assert ip.prefixlen == 64
+
+
+def test_ipnetwork_change_netmask():
+    ip = IPNetwork('192.168.0.0/16')
+    ip.netmask = '255.0.0.0'
+    assert ip.prefixlen == 8
+
+    ip = IPNetwork('dead:beef::/16')
+    ip.netmask = 'ffff:ffff:ffff:ffff::'
+    assert ip.prefixlen == 64
+
+
+def test_spanning_cidr_handles_strings():
+    # This that a regression introduced in 0fda41a is fixed. The regression caused an error when str
+    # addresses were passed to the function.
+    addresses = [
+        IPAddress('10.0.0.1'),
+        IPAddress('10.0.0.2'),
+        '10.0.0.3',
+        '10.0.0.4',
+    ]
+    assert spanning_cidr(addresses) == IPNetwork('10.0.0.0/29')
+    assert spanning_cidr(reversed(addresses)) == IPNetwork('10.0.0.0/29')

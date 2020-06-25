@@ -12,4 +12,7 @@ docs/build/
 .cache/
 .vagrant/
 tmp/
-*.iml/.pybuild/
+*.iml
+coverage.xml
+htmlcov/
+junit.xml

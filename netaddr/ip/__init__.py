@@ -12,7 +12,7 @@ from netaddr.core import AddrFormatError, AddrConversionError, num_bits, \
 
 from netaddr.strategy import ipv4 as _ipv4, ipv6 as _ipv6
 
-from netaddr.compat import _sys_maxint, _iter_range, _is_str, _int_type, \
+from netaddr.compat import _sys_maxint, _iter_next, _iter_range, _is_str, _int_type, \
     _str_type
 
 
@@ -22,7 +22,7 @@ class BaseIP(object):
     related subclasses.
 
     """
-    __slots__ = ('_value', '_module')
+    __slots__ = ('_value', '_module', '__weakref__')
 
     def __init__(self):
         """Constructor."""
@@ -498,6 +498,14 @@ class IPAddress(BaseIP):
         """
         #   Python 3.x
         return self._value
+
+    def __bytes__(self):
+        """ 
+        :return: a bytes object equivalent to this IP address. In network
+        byte order, big-endian.
+        """
+        #   Python 3.x
+        return self._value.to_bytes(self._module.width//8, 'big')
 
     def bits(self, word_sep=None):
         """
@@ -996,7 +1004,7 @@ class IPNetwork(BaseIP, IPListMixin):
     @property
     def broadcast(self):
         """The broadcast address of this `IPNetwork` object"""
-        if self._module.version == 4 and (self._module.width - self._prefixlen) <= 1:
+        if (self._module.width - self._prefixlen) <= 1:
             return None
         else:
             return IPAddress(self._value | self._hostmask_int, self._module.version)
@@ -1023,6 +1031,19 @@ class IPNetwork(BaseIP, IPListMixin):
         """The subnet mask of this `IPNetwork` object."""
         netmask = self._module.max_int ^ self._hostmask_int
         return IPAddress(netmask, self._module.version)
+
+    @netmask.setter
+    def netmask(self, value):
+        """Set the prefixlen using a subnet mask"""
+        ip = IPAddress(value)
+
+        if ip.version != self.version:
+            raise ValueError("IP version mismatch: %s and %s" % (ip, self))
+
+        if not ip.is_netmask():
+            raise ValueError("Invalid subnet mask specified: %s" % str(value))
+
+        self.prefixlen = ip.netmask_bits()
 
     @property
     def _netmask_int(self):
@@ -1119,8 +1140,8 @@ class IPNetwork(BaseIP, IPListMixin):
             if isinstance(other, IPNetwork):
                 return self_net == other_net and self._prefixlen <= other._prefixlen
 
-        # Whatever it is, try to interpret it as IPAddress.
-        return IPAddress(other) in self
+        # Whatever it is, try to interpret it as IPNetwork
+        return IPNetwork(other) in self
 
     def key(self):
         """
@@ -1285,36 +1306,38 @@ class IPNetwork(BaseIP, IPListMixin):
         A generator that provides all the IP addresses that can be assigned
         to hosts within the range of this IP object's subnet.
 
-        - for IPv4, the network and broadcast addresses are always excluded. \
-          for subnets that contains less than 4 IP addresses /31 and /32 \
-          report in a manner per RFC 3021
+        - for IPv4, the network and broadcast addresses are excluded, excepted \
+          when using /31 or /32 subnets as per RFC 3021.
 
-        - for IPv6, only the unspecified address '::' or Subnet-Router anycast \
-          address (first address in the network) is excluded.
+        - for IPv6, only Subnet-Router anycast address (first address in the \
+          network) is excluded as per RFC 4291 section 2.6.1, excepted when using \
+          /127 or /128 subnets as per RFC 6164.
 
         :return: an IPAddress iterator
         """
         it_hosts = iter([])
 
+        # Common logic, first IP is always reserved.
+        first_usable_address = self.first + 1
         if self._module.version == 4:
-            #   IPv4 logic.
-            if self.size >= 4:
-                it_hosts = iter_iprange(
-                        IPAddress(self.first + 1, self._module.version),
-                        IPAddress(self.last - 1, self._module.version))
-            else:
-                it_hosts = iter_iprange(
-                        IPAddress(self.first, self._module.version),
-                        IPAddress(self.last, self._module.version))
+            # IPv4 logic, last address is reserved for broadcast.
+            last_usable_address = self.last - 1
         else:
-            #   IPv6 logic.
-            # RFC 4291 section 2.6.1 says that the first IP in the network is
-            # the Subnet-Router anycast address. This address cannot be
-            # assigned to a host, so use self.first+1.
-            if self.size >= 2:
-                it_hosts = iter_iprange(
-                    IPAddress(self.first + 1, self._module.version),
+            # IPv6 logic, no broadcast address reserved.
+            last_usable_address = self.last
+
+        # If subnet has a size of less than 4, then it is a /31, /32, /127 or /128.
+        # Handle them as per RFC 3021 (IPv4) or RFC 6164 (IPv6), and don't reserve
+        # first or last IP address.
+        if self.size >= 4:
+            it_hosts = iter_iprange(
+                    IPAddress(first_usable_address, self._module.version),
+                    IPAddress(last_usable_address, self._module.version))
+        else:
+            it_hosts = iter_iprange(
+                    IPAddress(self.first, self._module.version),
                     IPAddress(self.last, self._module.version))
+
         return it_hosts
 
     def __str__(self):
@@ -1539,7 +1562,7 @@ def cidr_merge(ip_addrs):
     subnets where possible, those contained within others and also removes
     any duplicates.
 
-    :param ip_addrs: an iterable sequence of IP addresses and subnets.
+    :param ip_addrs: an iterable sequence of IP addresses, subnets or ranges.
 
     :return: a summarized list of `IPNetwork` objects.
     """
@@ -1552,9 +1575,12 @@ def cidr_merge(ip_addrs):
     ranges = []
 
     for ip in ip_addrs:
-        cidr = IPNetwork(ip)
+        if isinstance(ip, (IPNetwork, IPRange)):
+            net = ip
+        else:
+            net = IPNetwork(ip)
         # Since non-overlapping ranges are the common case, remember the original
-        ranges.append( (cidr.version, cidr.last, cidr.first, cidr) )
+        ranges.append( (net.version, net.last, net.first, net) )
 
     ranges.sort()
     i = len(ranges) - 1
@@ -1567,7 +1593,11 @@ def cidr_merge(ip_addrs):
     for range_tuple in ranges:
         # If this range wasn't merged we can simply use the old cidr.
         if len(range_tuple) == 4:
-            merged.append(range_tuple[3])
+            original = range_tuple[3]
+            if isinstance(original, IPRange):
+                merged.extend(original.cidrs())
+            else:
+                merged.append(original)
         else:
             version = range_tuple[0]
             range_start = IPAddress(range_tuple[2], version=version)
@@ -1660,28 +1690,40 @@ def spanning_cidr(ip_addrs):
 
     :return: a single spanning `IPNetwork` subnet.
     """
-    sorted_ips = sorted(
-        [IPNetwork(ip) for ip in ip_addrs])
-
-    if not len(sorted_ips) > 1:
+    ip_addrs_iter = iter(ip_addrs)
+    try:
+        network_a = IPNetwork(_iter_next(ip_addrs_iter))
+        network_b = IPNetwork(_iter_next(ip_addrs_iter))
+    except StopIteration:
         raise ValueError('IP sequence must contain at least 2 elements!')
 
-    lowest_ip = sorted_ips[0]
-    highest_ip = sorted_ips[-1]
+    if network_a < network_b:
+        min_network = network_a
+        max_network = network_b
+    else:
+        min_network = network_b
+        max_network = network_a
 
-    if lowest_ip.version != highest_ip.version:
+    for ip in ip_addrs_iter:
+        network = IPNetwork(ip)
+        if network < min_network:
+            min_network = network
+        if network > max_network:
+            max_network = network
+
+    if min_network.version != max_network.version:
         raise TypeError('IP sequence cannot contain both IPv4 and IPv6!')
 
-    ipnum = highest_ip.last
-    prefixlen = highest_ip.prefixlen
-    lowest_ipnum = lowest_ip.first
-    width = highest_ip._module.width
+    ipnum = max_network.last
+    prefixlen = max_network.prefixlen
+    lowest_ipnum = min_network.first
+    width = max_network._module.width
 
     while prefixlen > 0 and ipnum > lowest_ipnum:
         prefixlen -= 1
         ipnum &= -(1<<(width-prefixlen))
 
-    return IPNetwork( (ipnum, prefixlen), version=lowest_ip.version )
+    return IPNetwork( (ipnum, prefixlen), version=min_network.version )
 
 
 def iter_iprange(start, end, step=1):

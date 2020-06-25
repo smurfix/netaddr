@@ -13,8 +13,6 @@ from setuptools import setup
 if os.path.exists('MANIFEST'):
     os.remove('MANIFEST')
 
-import netaddr
-
 keywords = [
     'Networking', 'Systems Administration', 'IANA', 'IEEE', 'CIDR', 'IP',
     'IPv4', 'IPv6', 'CIDR', 'EUI', 'MAC', 'MAC-48', 'EUI-48', 'EUI-64'
@@ -40,50 +38,8 @@ package_data = {
     ],
 }
 
-#------------------------------------------------------------------------
-#   NB - keep this text around 74 characters wide so it is viewable
-#        in various fixed window sizes.
-long_description = """
-        Provides support for:
-
-        Layer 3 addresses
-        -----------------
-
-        - IPv4 and IPv6 addresses, subnets, masks, prefixes
-        - iterating, slicing, sorting, summarizing and classifying IP networks
-        - dealing with various ranges formats (CIDR, arbitrary ranges and globs, nmap)
-        - set based operations (unions, intersections etc) over IP addresses and subnets
-        - parsing a large variety of different formats and notations
-        - looking up IANA IP block information
-        - generating DNS reverse lookups
-        - supernetting and subnetting
-
-        Layer 2 addresses
-        -----------------
-
-        - representation and manipulation MAC addresses and EUI-64 identifiers
-        - looking up IEEE organisational information (OUI, IAB)
-        - generating derived IPv6 addresses
-
-        Documentation
-        -------------
-
-        http://netaddr.readthedocs.io/
-
-        Changes
-        -------
-
-        For details on the latest changes and updates, see :-
-
-        http://netaddr.readthedocs.io/en/latest/changes.html
-
-        Requirements
-        ------------
-
-        Supports Python versions 2.5 through 3.6
-
-        Share and enjoy!
-"""
+with open('README.rst') as f:
+    long_description = f.read()
 
 platforms = 'OS Independent'
 
@@ -102,17 +58,12 @@ classifiers = [
     'Operating System :: OS Independent',
     'Programming Language :: Python',
     'Programming Language :: Python :: 2',
-    'Programming Language :: Python :: 2.5',
-    'Programming Language :: Python :: 2.6',
     'Programming Language :: Python :: 2.7',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.0',
-    'Programming Language :: Python :: 3.1',
-    'Programming Language :: Python :: 3.2',
-    'Programming Language :: Python :: 3.3',
-    'Programming Language :: Python :: 3.4',
     'Programming Language :: Python :: 3.5',
     'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
     'Topic :: Communications',
     'Topic :: Documentation',
     'Topic :: Education',
@@ -166,7 +117,7 @@ def main():
         author_email='drkjam@gmail.com',
         classifiers=classifiers,
         description='A network address manipulation library for Python',
-        download_url='https://pypi.python.org/pypi/netaddr/',
+        download_url='https://pypi.org/project/netaddr/',
         keywords=keywords,
         license='BSD License',
         long_description=long_description,
@@ -174,14 +125,18 @@ def main():
         package_data=package_data,
         packages=packages,
         platforms=platforms,
-        scripts=['netaddr/tools/netaddr'],
+        entry_points={'console_scripts': ['netaddr = netaddr.cli:main']},
         url='https://github.com/drkjam/netaddr/',
-        version=netaddr.__version__,
-        options={
-            'build_scripts': {
-                'executable': '/usr/bin/env python',
-            },
-        },
+        version=(
+            [
+                ln for ln in open(os.path.join(os.path.dirname(__file__), 'netaddr', '__init__.py'))
+                if '__version__' in ln
+            ][0]
+            .split('=')[-1]
+            .strip()
+            .strip('\'"')
+        ),
+        install_requires=['importlib-resources;python_version<"3.7"'],
     )
 
     setup(**setup_options)
